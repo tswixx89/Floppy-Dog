@@ -1,0 +1,375 @@
+workflows:
+
+
+android-build:
+
+
+name: Android Build (APK)
+
+
+max_build_duration: 30
+
+
+instance_type: mac_mini_m2
+
+
+environment:
+
+
+node: latest
+
+
+java: 21
+
+
+scripts:
+
+
+- name: Build Web to Android APK
+
+
+script: |
+
+
+set -e
+
+
+​# 1. Structure the web folder
+
+
+mkdir -p www
+
+
+find . -maxdepth 1 -not -name '.' -not -name 'www' -not -name 'android' -not -name 'ios' -not -name 'desktop-build' -not -name 'node_modules' -not -name '.yaml' -not -name '.yml' -exec cp -r {} www/ ;
+
+
+​# 2. Install Capacitor packages
+
+
+npm init -y
+
+
+npm install --save @capacitor/core @capacitor/cli @capacitor/android
+
+
+​# 3. Create native Android project
+
+
+npx cap init "floppydog" "com.floppydog.app" --web-dir www
+
+
+npx cap add android
+
+
+npx cap sync android
+
+
+​# 4. Build installable debug APK
+
+
+cd android
+
+
+chmod +x gradlew
+
+
+./gradlew assembleDebug
+
+
+​# 5. Move APK to artifacts directory
+
+
+mkdir -p ../build-artifacts
+
+
+cp app/build/outputs/apk/debug/app-debug.apk ../build-artifacts/floppydog.apk
+
+
+artifacts:
+
+
+- build-artifacts/*.apk
+
+
+​ios-build:
+
+
+name: iOS Build
+
+
+max_build_duration: 60
+
+
+instance_type: mac_mini_m2
+
+
+environment:
+
+
+node: latest
+
+
+xcode: latest
+
+
+scripts:
+
+
+- name: Build Web to iOS IPA
+
+
+script: |
+
+
+set -e
+
+
+mkdir -p www
+
+
+find . -maxdepth 1 -not -name '.' -not -name 'www' -not -name 'android' -not -name 'ios' -not -name 'desktop-build' -not -name 'node_modules' -not -name '.yaml' -not -name '.yml' -exec cp -r {} www/ ;
+
+
+​npm init -y
+
+
+npm install --save @capacitor/core @capacitor/cli @capacitor/ios
+
+
+npx cap init "floppy dog" "com.floppydog.app" --web-dir www
+
+
+npx cap add ios
+
+
+npx cap sync ios
+
+
+​cd ios/App
+
+
+if [ -f "Podfile" ]; then
+
+
+pod install --repo-update
+
+
+TARGET_FLAG="-workspace App.xcworkspace"
+
+
+else
+
+
+TARGET_FLAG="-project App.xcodeproj"
+
+
+fi
+
+
+​xcodebuild clean archive $TARGET_FLAG -scheme App -configuration Release -destination 'generic/platform=iOS' -archivePath build/App.xcarchive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+
+​mkdir -p Payload
+
+
+cp -r build/App.xcarchive/Products/Applications/App.app Payload/
+
+
+zip -qr floppydog.ipa Payload
+
+
+​mkdir -p ../../build-artifacts
+
+
+mv floppydog.ipa ../../build-artifacts/
+
+
+artifacts:
+
+
+- build-artifacts/*.ipa
+
+
+​windows-build:
+
+
+name: Windows Build (.exe)
+
+
+max_build_duration: 30
+
+
+instance_type: mac_mini_m2
+
+
+environment:
+
+
+node: latest
+
+
+scripts:
+
+
+- name: Bundle HTML into Windows Executable
+
+
+script: |
+
+
+set -e
+
+
+​mkdir -p desktop-build
+
+
+find . -maxdepth 1 -not -name '.' -not -name 'desktop-build' -not -name 'android' -not -name 'ios' -not -name 'www' -not -name 'node_modules' -not -name '.yaml' -not -name '.yml' -exec cp -r {} desktop-build/ ;
+
+
+​cd desktop-build
+
+
+​cat << 'EOF' > package.json
+
+
+{
+
+
+"name": "floppy-dog",
+
+
+"version": "1.0.0",
+
+
+"description": "FloppyDog Desktop App",
+
+
+"main": "main.js",
+
+
+"scripts": {
+
+
+"dist": "electron-builder --win --x64"
+
+
+},
+
+
+"build": {
+
+
+"appId": "com.floppydog.app",
+
+
+"productName": "FloppyDog",
+
+
+"win": {
+
+
+"target": "nsis"
+
+
+},
+
+
+"nsis": {
+
+
+"oneClick": true,
+
+
+"perMachine": false
+
+
+}
+
+
+}
+
+
+}
+
+
+EOF
+
+
+​cat << 'EOF' > main.js
+
+
+const { app, BrowserWindow } = require('electron');
+
+
+const path = require('path');
+
+
+​function createWindow() {
+
+
+const win = new BrowserWindow({
+
+
+width: 1200,
+
+
+height: 800,
+
+
+autoHideMenuBar: true,
+
+
+webPreferences: {
+
+
+nodeIntegration: false,
+
+
+contextIsolation: true
+
+
+}
+
+
+});
+
+
+win.loadFile('index.html');
+
+
+}
+
+
+​app.whenReady().then(createWindow);
+
+
+app.on('window-all-closed', () => {
+
+
+if (process.platform !== 'darwin') app.quit();
+
+
+});
+
+
+EOF
+
+
+​npm install --save-dev electron electron-builder
+
+
+npx electron-builder --win nsis --x64
+
+
+​mkdir -p ../build-artifacts
+
+
+cp dist/.exe ../build-artifacts/floppydog-Setup.exe
+
+
+artifacts:
+
+
+- build-artifacts/.exe
+
+
