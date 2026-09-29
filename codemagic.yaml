@@ -9,7 +9,7 @@ java: 21
 scripts:
 - name: Build Web to Android APK
 script: |
-set -e
+set: -e
 
 # 1. Structure the web folder
 mkdir -p www
