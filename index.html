@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Voxel Craft</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'VT323', monospace;
+            background-color: #87CEEB;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass to canvas when needed */
+        }
+
+        .pointer-events-auto {
+            pointer-events: auto;
+        }
+
+        /* Main Menu Styling */
+        .mc-btn {
+            background-color: #c6c6c6;
+            border: 4px solid;
+            border-color: #ffffff #555555 #555555 #ffffff;
+            color: #333;
+            text-shadow: 2px 2px 0px #fff;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+        .mc-btn:hover {
+            background-color: #d6d6d6;
+        }
+        .mc-btn:active {
+            border-color: #555555 #ffffff #ffffff #555555;
+            transform: translateY(2px);
+        }
+
+        /* Hotbar Styling */
+        .hotbar-slot {
+            width: 48px;
+            height: 48px;
+            background-color: rgba(139, 139, 139, 0.8);
+            border: 3px solid;
+            border-color: #ffffff #555555 #555555 #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .hotbar-slot.active {
+            border: 4px solid white;
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+            transform: scale(1.1);
+            z-index: 20;
+        }
+        .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            color: white;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 1.2rem;
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255,255,255,0.8);
+            mix-blend-mode: difference;
+        }
+        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+
+        /* Inventory Window */
+        .mc-window {
+            background-color: #c6c6c6;
+            border: 4px solid;
+            border-color: #ffffff #555555 #555555 #ffffff;
+            box-shadow: inset 0 0 0 2px #000, 0 10px 20px rgba(0,0,0,0.5);
+        }
+
+        /* Icon generator classes */
+        .icon-grass { background: linear-gradient(to bottom, #55aa55 50%, #8b5a2b 50%); }
+        .icon-dirt { background-color: #8b5a2b; }
+        .icon-stone { background-color: #888888; }
+        .icon-wood { background: radial-gradient(circle, #deb887 30%, #5c4033 40%); }
+        .icon-leaves { background-color: #228b22; opacity: 0.8; }
+        .icon-planks { background-color: #c49a6c; border: 1px solid #8B5A2B; }
+        .icon-hoe { background: linear-gradient(45deg, #555 20%, transparent 20%), linear-gradient(-45deg, #8b5a2b 80%, transparent 80%); }
+        .icon-seeds { background-color: #aadd00; border-radius: 50%; width: 50% !important; height: 50% !important; margin: auto; }
+        .icon-wheat { background: repeating-linear-gradient(90deg, #ffd700, #ffd700 2px, #daa520 2px, #daa520 4px); width: 60% !important; height: 80% !important; margin: auto; }
+
+        .block-icon {
+            width: 32px;
+            height: 32px;
+            box-shadow: inset -2px -2px 0 rgba(0,0,0,0.3), inset 2px 2px 0 rgba(255,255,255,0.4);
+        }
+        
+        #mobile-controls {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: none;
+            z-index: 30;
+        }
+        .mobile-btn {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            user-select: none;
+            touch-action: none;
+            text-shadow: 1px 1px 0 #000;
+        }
+        .mobile-btn:active { background: rgba(255,255,255,0.5); }
+        #joystick-base {
+            position: absolute; bottom: 30px; left: 30px;
+            width: 120px; height: 120px;
+            background: rgba(0,0,0,0.3); border-radius: 50%;
+            pointer-events: auto; touch-action: none;
+        }
+        #joystick-knob {
+            position: absolute; top: 50%; left: 50%;
+            width: 50px; height: 50px;
+            background: rgba(255,255,255,0.6); border-radius: 50%;
+            transform: translate(-50%, -50%); pointer-events: none;
+        }
+        #btn-jump { position: absolute; bottom: 30px; right: 30px; width: 80px; height: 80px;}
+        #btn-break { position: absolute; bottom: 30px; right: 130px; width: 60px; height: 60px; }
+        #btn-place { position: absolute; bottom: 100px; right: 80px; width: 60px; height: 60px; }
+        #btn-inv-mobile { position: absolute; top: 20px; right: 20px; width: 50px; height: 50px; border-radius: 10px; display: none; z-index: 40;}
+        #touch-look-zone {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: auto; touch-action: none; z-index: 5; display: none;
+        }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-layer">
+        <!-- Main Menu -->
+        <div id="main-menu" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 pointer-events-auto backdrop-blur-sm z-50">
+            <h1 class="text-7xl text-white mb-12 tracking-widest" style="text-shadow: 4px 4px 0 #333, -4px -4px 0 #333, 4px -4px 0 #333, -4px 4px 0 #333;">VOXEL CRAFT</h1>
+            
+            <button id="btn-play" class="mc-btn text-4xl py-3 px-20 mb-6 w-80">Play Game</button>
+            <button id="btn-help" class="mc-btn text-4xl py-3 px-20 w-80 mb-6">How to Play</button>
+            
+            <div id="help-panel" class="hidden mc-window p-6 max-w-lg text-2xl text-black mt-4">
+                <p><strong>W, A, S, D:</strong> Move</p>
+                <p><strong>Space:</strong> Jump</p>
+                <p><strong>Left Click:</strong> Break Block</p>
+                <p><strong>Right Click:</strong> Place Block / Use Item</p>
+                <p><strong>1-9:</strong> Select Hotbar Item</p>
+                <p><strong>E:</strong> Open Inventory / Crafting</p>
+                <p class="mt-4 text-green-700"><strong>Farming:</strong> Right-click Dirt with Hoe to make Farmland. Right-click Farmland with Seeds to plant.</p>
+            </div>
+        </div>
+
+        <!-- In-Game HUD -->
+        <div id="hud" class="hidden absolute inset-0 w-full h-full">
+            <div id="touch-look-zone"></div>
+            <div id="crosshair"></div>
+            
+            <!-- Target Block Info -->
+            <div id="target-info" class="absolute top-4 left-1/2 transform -translate-x-1/2 text-white text-2xl z-20 pointer-events-none" style="text-shadow: 2px 2px 0 #000;"></div>
+
+            <!-- Hotbar -->
+            <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-1 pointer-events-auto bg-black/20 p-1 rounded z-40">
+                <!-- Generated by JS -->
+                <div id="hotbar-container" class="flex gap-1"></div>
+            </div>
+            
+            <!-- Mobile Controls -->
+            <div id="mobile-controls">
+                <div id="joystick-base"><div id="joystick-knob"></div></div>
+                <div id="btn-jump" class="mobile-btn">JUMP</div>
+                <div id="btn-break" class="mobile-btn">BREAK</div>
+                <div id="btn-place" class="mobile-btn">PLACE</div>
+            </div>
+            <div id="btn-inv-mobile" class="mobile-btn">INV</div>
+        </div>
+
+        <!-- Inventory & Crafting Screen -->
+        <div id="inventory-screen" class="hidden absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-auto z-50">
+            <button id="btn-close-inv" class="absolute top-4 right-4 mc-btn text-2xl py-2 px-6">X</button>
+            <div class="mc-window p-8 w-full max-w-3xl flex flex-col md:flex-row gap-8">
+                
+                <!-- Crafting Section -->
+                <div class="flex-1 bg-[#8b8b8b] p-4 border-2 border-white/50 rounded shadow-inner">
+                    <h2 class="text-3xl mb-4 text-white drop-shadow-md">Crafting</h2>
+                    <div class="flex items-center gap-4 mb-4">
+                        <div class="w-16 h-16 bg-gray-400 border-4 border-gray-600 flex items-center justify-center block-icon icon-wood shadow-lg" title="Requires 1 Wood"></div>
+                        <span class="text-4xl text-white">➔</span>
+                        <div class="w-16 h-16 bg-gray-400 border-4 border-gray-600 flex items-center justify-center block-icon icon-planks shadow-lg relative">
+                            <span class="absolute bottom-0 right-1 text-white text-xl drop-shadow-md">x4</span>
+                        </div>
+                    </div>
+                    <button id="btn-craft-planks" class="mc-btn text-2xl py-2 px-6 w-full">Craft Planks</button>
+                </div>
+
+                <!-- Inventory Section -->
+                <div class="flex-1 bg-[#8b8b8b] p-4 border-2 border-white/50 rounded shadow-inner">
+                    <h2 class="text-3xl mb-4 text-white drop-shadow-md">Inventory Stats</h2>
+                    <ul id="inventory-stats" class="text-2xl text-white space-y-2 drop-shadow-md">
+                        <!-- Filled by JS -->
+                    </ul>
+                    <p class="mt-8 text-xl text-yellow-300 drop-shadow-md">Press 'E' or ESC to close.</p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS & DATA ---
+        const BLOCKS = {
+            AIR: 0,
+            GRASS: 1,
+            DIRT: 2,
+            STONE: 3,
+            WOOD: 4,
+            LEAVES: 5,
+            PLANKS: 6,
+            FARMLAND: 7,
+            WHEAT_0: 8,
+            WHEAT_1: 9,
+            WHEAT_2: 10
+        };
+
+        const ITEMS = {
+            HOE: 101,
+            SEEDS: 102
+        };
+
+        // Inventory definition (Hotbar items + quantities)
+        let inventory = [
+            { id: BLOCKS.GRASS, count: 64, type: 'block', icon: 'icon-grass' },
+            { id: BLOCKS.DIRT, count: 64, type: 'block', icon: 'icon-dirt' },
+            { id: BLOCKS.STONE, count: 64, type: 'block', icon: 'icon-stone' },
+            { id: BLOCKS.WOOD, count: 64, type: 'block', icon: 'icon-wood' },
+            { id: BLOCKS.LEAVES, count: 64, type: 'block', icon: 'icon-leaves' },
+            { id: BLOCKS.PLANKS, count: 0, type: 'block', icon: 'icon-planks' },
+            { id: ITEMS.HOE, count: 1, type: 'tool', icon: 'icon-hoe' },
+            { id: ITEMS.SEEDS, count: 10, type: 'item', icon: 'icon-seeds' },
+            { id: BLOCKS.WHEAT_2, count: 0, type: 'item', icon: 'icon-wheat' } // Harvested wheat
+        ];
+        let activeSlot = 0;
+
+        // World Data
+        const WORLD_SIZE = 32;
+        const WORLD_HEIGHT = 16;
+        const CHUNK = new Uint8Array(WORLD_SIZE * WORLD_HEIGHT * WORLD_SIZE);
+        const blockMeshes = new Map(); // Store active meshes by "x,y,z" string key
+
+        // Farming Data
+        const crops = new Map(); // Key: "x,y,z", Value: { stage, lastGrowTime }
+
+        // Three.js Globals
+        let scene, camera, renderer, raycaster;
+        let materials = {};
+        let blockGeometry;
+
+        // Player / Physics Globals
+        const player = {
+            x: WORLD_SIZE / 2,
+            y: 12,
+            z: WORLD_SIZE / 2,
+            vx: 0, vy: 0, vz: 0,
+            speed: 5,
+            jumpPower: 8,
+            height: 1.6,
+            radius: 0.3,
+            onGround: false
+        };
+        const keys = { w: false, a: false, s: false, d: false, space: false };
+        const gravity = -20;
+        let pitchObject, yawObject; // For camera rotation
+        
+        let isLocked = false; 
+        let isPlaying = false;
+        let isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+        let joystickData = { x: 0, y: 0 };
+        let lookTouchId = null;
+        let prevTouchX = 0, prevTouchY = 0;
+
+        let prevTime = performance.now();
+
+        // --- TEXTURE GENERATOR ---
+        // Generates textures using HTML5 Canvas to avoid external image loading
+        function createTexture(type) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            if (type === 'grass_top') {
+                ctx.fillStyle = '#55aa55';
+                ctx.fillRect(0, 0, 64, 64);
+                // Add noise
+                for(let i=0; i<400; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#4da64d' : '#5db45d';
+                    ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+                }
+            } else if (type === 'grass_side') {
+                ctx.fillStyle = '#8b5a2b';
+                ctx.fillRect(0, 0, 64, 64);
+                ctx.fillStyle = '#55aa55';
+                ctx.fillRect(0, 0, 64, 16); // Grass top edge
+                for(let i=0; i<16; i+=4) { // Fringe
+                    ctx.fillRect(i*4, 16, 4, Math.random()*8);
+                }
+            } else if (type === 'dirt') {
+                ctx.fillStyle = '#8b5a2b';
+                ctx.fillRect(0, 0, 64, 64);
+                for(let i=0; i<300; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#7a4b20' : '#9c6633';
+                    ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+                }
+            } else if (type === 'stone') {
+                ctx.fillStyle = '#888888';
+                ctx.fillRect(0, 0, 64, 64);
+                for(let i=0; i<500; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#777777' : '#999999';
+                    ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+                }
+            } else if (type === 'wood_side') {
+                ctx.fillStyle = '#5c4033'; // Bark
+                ctx.fillRect(0, 0, 64, 64);
+                ctx.fillStyle = '#4a332a';
+                for(let i=0; i<8; i++) {
+                    ctx.fillRect(i*8 + Math.random()*2, 0, 2, 64);
+                }
+            } else if (type === 'wood_top') {
+                ctx.fillStyle = '#deb887';
+                ctx.fillRect(0, 0, 64, 64);
+                ctx.beginPath();
+                ctx.arc(32, 32, 24, 0, Math.PI*2);
+                ctx.strokeStyle = '#cda776'; ctx.lineWidth = 4; ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(32, 32, 12, 0, Math.PI*2);
+                ctx.stroke();
+            } else if (type === 'leaves') {
+                ctx.fillStyle = '#228b22';
+                ctx.fillRect(0, 0, 64, 64);
+                for(let i=0; i<400; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? '#1e7b1e' : '#299b29';
+                    ctx.fillRect(Math.random()*64, Math.random()*64, 4, 4);
+                }
+                ctx.fillStyle = 'rgba(0,0,0,0.2)'; // Fake transparency gaps
+                for(let i=0; i<50; i++) {
+                    ctx.fillRect(Math.random()*64, Math.random()*64, 8, 8);
+                }
+            } else if (type === 'planks') {
+                ctx.fillStyle = '#c49a6c';
+                ctx.fillRect(0, 0, 64, 64);
+                ctx.fillStyle = '#b3885b';
+                ctx.fillRect(0, 15, 64, 2);
+                ctx.fillRect(0, 31, 64, 2);
+                ctx.fillRect(0, 47, 64, 2);
+                for(let i=0; i<200; i++) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+                    ctx.fillRect(Math.random()*64, Math.random()*64, 4, 1);
+                }
+            } else if (type === 'farmland_top') {
+                ctx.fillStyle = '#5c3a21'; // Dark moist dirt
+                ctx.fillRect(0, 0, 64, 64);
+                ctx.fillStyle = '#4a2e1a';
+                // Tilled lines
+                for(let i=0; i<64; i+=16) {
+                    ctx.fillRect(0, i+4, 64, 4);
+                }
+            } else if (type.startsWith('wheat_')) {
+                ctx.clearRect(0, 0, 64, 64);
+                let stage = parseInt(type.split('_')[1]);
+                ctx.fillStyle = stage === 0 ? '#aadd00' : (stage === 1 ? '#9acd32' : '#ffd700');
+                let height = stage === 0 ? 16 : (stage === 1 ? 32 : 48);
+                for(let i=8; i<64; i+=16) {
+                    ctx.fillRect(i, 64-height, 4, height);
+                    if(stage > 0) { // Add some leaves/grain
+                        ctx.fillRect(i-4, 64-height+8, 12, 4);
+                    }
+                    if(stage === 2) {
+                        ctx.fillRect(i-2, 64-height, 8, 8); // Grain head
+                    }
+                }
+            }
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter; // Pixelated look
+            tex.minFilter = THREE.NearestFilter;
+            return tex;
+        }
+
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 10, 40);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+            
+            // First Person Camera Setup
+            pitchObject = new THREE.Object3D();
+            pitchObject.add(camera);
+            yawObject = new THREE.Object3D();
+            yawObject.add(pitchObject);
+            scene.add(yawObject);
+
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            dirLight.position.set(10, 20, 10);
+            scene.add(dirLight);
+
+            raycaster = new THREE.Raycaster();
+
+            // Setup Materials
+            const makeMat = (tex) => new THREE.MeshLambertMaterial({ map: tex });
+            const makeTransparentMat = (tex) => new THREE.MeshLambertMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+
+            const texGrassTop = createTexture('grass_top');
+            const texGrassSide = createTexture('grass_side');
+            const texDirt = createTexture('dirt');
+            const texStone = createTexture('stone');
+            const texWoodTop = createTexture('wood_top');
+            const texWoodSide = createTexture('wood_side');
+            const texLeaves = createTexture('leaves');
+            const texPlanks = createTexture('planks');
+            const texFarmland = createTexture('farmland_top');
+
+            materials[BLOCKS.GRASS] = [makeMat(texGrassSide), makeMat(texGrassSide), makeMat(texGrassTop), makeMat(texDirt), makeMat(texGrassSide), makeMat(texGrassSide)];
+            materials[BLOCKS.DIRT] = makeMat(texDirt);
+            materials[BLOCKS.STONE] = makeMat(texStone);
+            materials[BLOCKS.WOOD] = [makeMat(texWoodSide), makeMat(texWoodSide), makeMat(texWoodTop), makeMat(texWoodTop), makeMat(texWoodSide), makeMat(texWoodSide)];
+            materials[BLOCKS.LEAVES] = makeMat(texLeaves); // Basic material for leaves to keep geometry simple
+            materials[BLOCKS.PLANKS] = makeMat(texPlanks);
+            materials[BLOCKS.FARMLAND] = [makeMat(texDirt), makeMat(texDirt), makeMat(texFarmland), makeMat(texDirt), makeMat(texDirt), makeMat(texDirt)];
+            
+            // Crop materials (rendered as planes inside block)
+            materials[BLOCKS.WHEAT_0] = makeTransparentMat(createTexture('wheat_0'));
+            materials[BLOCKS.WHEAT_1] = makeTransparentMat(createTexture('wheat_1'));
+            materials[BLOCKS.WHEAT_2] = makeTransparentMat(createTexture('wheat_2'));
+
+            blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function getIndex(x, y, z) {
+            return x + (y * WORLD_SIZE) + (z * WORLD_SIZE * WORLD_HEIGHT);
+        }
+
+        function getBlock(x, y, z) {
+            if (x < 0 || x >= WORLD_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= WORLD_SIZE) return 0;
+            return CHUNK[getIndex(x, y, z)];
+        }
+
+        function setBlock(x, y, z, id) {
+            if (x < 0 || x >= WORLD_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= WORLD_SIZE) return;
+            CHUNK[getIndex(x, y, z)] = id;
+            updateMesh(x, y, z);
+            
+            // If placed farmland, clear any existing crop
+            if (id === BLOCKS.FARMLAND) {
+                // Ensure block above is air
+                setBlock(x, y+1, z, BLOCKS.AIR);
+            }
+        }
+
+        function generateWorld() {
+            for (let x = 0; x < WORLD_SIZE; x++) {
+                for (let z = 0; z < WORLD_SIZE; z++) {
+                    // Simple heightmap using sine waves
+                    const h = Math.floor(5 + Math.sin(x * 0.2) * 2 + Math.cos(z * 0.2) * 2);
+                    for (let y = 0; y < WORLD_HEIGHT; y++) {
+                        let id = BLOCKS.AIR;
+                        if (y === h) id = BLOCKS.GRASS;
+                        else if (y < h && y > h - 3) id = BLOCKS.DIRT;
+                        else if (y <= h - 3) id = BLOCKS.STONE;
+                        
+                        // Add some trees
+                        if (id === BLOCKS.GRASS && Math.random() < 0.05 && x > 2 && x < WORLD_SIZE-2 && z > 2 && z < WORLD_SIZE-2) {
+                            CHUNK[getIndex(x, y, z)] = BLOCKS.DIRT; // Under tree
+                            // Generate tree in next frames (simulated here by forcing placement)
+                            for(let ty=1; ty<=4; ty++) CHUNK[getIndex(x, y+ty, z)] = BLOCKS.WOOD;
+                            for(let lx=-2; lx<=2; lx++) {
+                                for(let lz=-2; lz<=2; lz++) {
+                                    for(let ly=3; ly<=5; ly++) {
+                                        if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly === 5) continue;
+                                        if (lx===0 && lz===0 && ly<5) continue;
+                                        let ix = x+lx; let iy = y+ly; let iz = z+lz;
+                                        if (ix>=0 && ix<WORLD_SIZE && iz>=0 && iz<WORLD_SIZE && iy<WORLD_HEIGHT) {
+                                            if(CHUNK[getIndex(ix, iy, iz)] === BLOCKS.AIR) {
+                                                CHUNK[getIndex(ix, iy, iz)] = BLOCKS.LEAVES;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (id !== BLOCKS.AIR && CHUNK[getIndex(x, y, z)] === 0) {
+                            CHUNK[getIndex(x, y, z)] = id;
+                        }
+                    }
+                }
+            }
+
+            // Build initial meshes
+            for (let x = 0; x < WORLD_SIZE; x++) {
+                for (let y = 0; y < WORLD_HEIGHT; y++) {
+                    for (let z = 0; z < WORLD_SIZE; z++) {
+                        updateMesh(x, y, z);
+                    }
+                }
+            }
+        }
+
+        function createCropMesh(type) {
+            // Create a mesh with two crossing planes for plants
+            const geom = new THREE.PlaneGeometry(1, 1);
+            geom.translate(0, 0.5, 0); // Origin at bottom
+            const mesh1 = new THREE.Mesh(geom, materials[type]);
+            const mesh2 = new THREE.Mesh(geom, materials[type]);
+            mesh2.rotation.y = Math.PI / 2;
+            
+            const group = new THREE.Group();
+            group.add(mesh1);
+            group.add(mesh2);
+            return group;
+        }
+
+        function updateMesh(x, y, z) {
+            const key = `${x},${y},${z}`;
+            const id = getBlock(x, y, z);
+
+            // Remove existing
+            if (blockMeshes.has(key)) {
+                scene.remove(blockMeshes.get(key));
+                blockMeshes.delete(key);
+            }
+
+            if (id !== BLOCKS.AIR) {
+                // Optimization: Only render if exposed to air
+                let exposed = false;
+                if (getBlock(x+1,y,z)===0 || getBlock(x-1,y,z)===0 || 
+                    getBlock(x,y+1,z)===0 || getBlock(x,y-1,z)===0 || 
+                    getBlock(x,y,z+1)===0 || getBlock(x,y,z-1)===0 ||
+                    id >= BLOCKS.WHEAT_0) { // Always render crops
+                    exposed = true;
+                }
+
+                if (exposed) {
+                    let mesh;
+                    if (id >= BLOCKS.WHEAT_0 && id <= BLOCKS.WHEAT_2) {
+                        mesh = createCropMesh(id);
+                        // Center crop on block
+                        mesh.position.set(x, y - 0.5, z);
+                    } else {
+                        mesh = new THREE.Mesh(blockGeometry, materials[id]);
+                        mesh.position.set(x, y, z);
+                    }
+                    mesh.userData = { x, y, z, id }; // Store grid coords for raycasting
+                    scene.add(mesh);
+                    blockMeshes.set(key, mesh);
+                }
+            }
+            
+            // Re-evaluate neighbors to show/hide them based on new exposure
+            updateNeighborMeshVisibility(x+1, y, z);
+            updateNeighborMeshVisibility(x-1, y, z);
+            updateNeighborMeshVisibility(x, y+1, z);
+            updateNeighborMeshVisibility(x, y-1, z);
+            updateNeighborMeshVisibility(x, y, z+1);
+            updateNeighborMeshVisibility(x, y, z-1);
+        }
+
+        function updateNeighborMeshVisibility(x,y,z) {
+             const key = `${x},${y},${z}`;
+             const id = getBlock(x, y, z);
+             if (id === BLOCKS.AIR) return;
+             
+             let exposed = false;
+             if (getBlock(x+1,y,z)===0 || getBlock(x-1,y,z)===0 || 
+                 getBlock(x,y+1,z)===0 || getBlock(x,y-1,z)===0 || 
+                 getBlock(x,y,z+1)===0 || getBlock(x,y,z-1)===0 || id >= BLOCKS.WHEAT_0) {
+                 exposed = true;
+             }
+
+             if (exposed && !blockMeshes.has(key)) {
+                 let mesh = new THREE.Mesh(blockGeometry, materials[id]);
+                 mesh.position.set(x, y, z);
+                 mesh.userData = { x, y, z, id };
+                 scene.add(mesh);
+                 blockMeshes.set(key, mesh);
+             } else if (!exposed && blockMeshes.has(key)) {
+                 scene.remove(blockMeshes.get(key));
+                 blockMeshes.delete(key);
+             }
+        }
+        
+        function tryBreakBlock() {
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(Array.from(blockMeshes.values()), true);
+            if (intersects.length > 0) {
+                let intersect = intersects[0];
+                let tx = Math.round(intersect.point.x - intersect.face.normal.x * 0.1);
+                let ty = Math.round(intersect.point.y - intersect.face.normal.y * 0.1);
+                let tz = Math.round(intersect.point.z - intersect.face.normal.z * 0.1);
+                const targetBlockId = getBlock(tx, ty, tz);
+                if (targetBlockId !== BLOCKS.AIR) {
+                    setBlock(tx, ty, tz, BLOCKS.AIR);
+                    if (targetBlockId < 100) {
+                        let invItem = inventory.find(i => i.id === targetBlockId);
+                        if(invItem) { invItem.count++; renderHotbar(); }
+                    }
+                    if (crops.has(`${tx},${ty},${tz}`)) crops.delete(`${tx},${ty},${tz}`);
+                }
+            }
+        }
+
+        function tryPlaceBlock() {
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(Array.from(blockMeshes.values()), true);
+            if (intersects.length > 0) {
+                let intersect = intersects[0];
+                let tx = Math.round(intersect.point.x - intersect.face.normal.x * 0.1);
+                let ty = Math.round(intersect.point.y - intersect.face.normal.y * 0.1);
+                let tz = Math.round(intersect.point.z - intersect.face.normal.z * 0.1);
+                const targetBlockId = getBlock(tx, ty, tz);
+                const item = inventory[activeSlot];
+                if (!item) return;
+
+                if (item.type === 'tool' && item.id === ITEMS.HOE) {
+                    if (targetBlockId === BLOCKS.DIRT || targetBlockId === BLOCKS.GRASS) setBlock(tx, ty, tz, BLOCKS.FARMLAND);
+                } 
+                else if (item.type === 'item' && item.id === ITEMS.SEEDS) {
+                    if (targetBlockId === BLOCKS.FARMLAND && getBlock(tx, ty+1, tz) === BLOCKS.AIR && item.count > 0) {
+                        setBlock(tx, ty+1, tz, BLOCKS.WHEAT_0);
+                        crops.set(`${tx},${ty+1},${tz}`, { stage: 0, lastGrowTime: performance.now() });
+                        item.count--;
+                        renderHotbar();
+                    }
+                }
+                else if (item.type === 'block' && item.count > 0) {
+                    let nx = Math.round(intersect.point.x + intersect.face.normal.x * 0.1);
+                    let ny = Math.round(intersect.point.y + intersect.face.normal.y * 0.1);
+                    let nz = Math.round(intersect.point.z + intersect.face.normal.z * 0.1);
+                    if (Math.abs(nx - player.x) < 0.8 && Math.abs(ny - player.y) < 2 && Math.abs(nz - player.z) < 0.8) return;
+                    setBlock(nx, ny, nz, item.id);
+                    item.count--;
+                    renderHotbar();
+                }
+            }
+        }
+
+        function initControls() {
+            document.addEventListener('keydown', (e) => {
+                if(e.code === 'KeyW') keys.w = true;
+                if(e.code === 'KeyA') keys.a = true;
+                if(e.code === 'KeyS') keys.s = true;
+                if(e.code === 'KeyD') keys.d = true;
+                if(e.code === 'Space') keys.space = true;
+                
+                // Hotbar selection
+                if(e.key >= '1' && e.key <= '9') {
+                    activeSlot = parseInt(e.key) - 1;
+                    renderHotbar();
+                }
+
+                // Inventory Toggle
+                if(e.code === 'KeyE') {
+                    toggleInventory();
+                }
+                if(e.code === 'Escape' && document.getElementById('inventory-screen').classList.contains('hidden') === false) {
+                     toggleInventory();
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                if(e.code === 'KeyW') keys.w = false;
+                if(e.code === 'KeyA') keys.a = false;
+                if(e.code === 'KeyS') keys.s = false;
+                if(e.code === 'KeyD') keys.d = false;
+                if(e.code === 'Space') keys.space = false;
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isPlaying || isMobile) return;
+                const movementX = e.movementX || 0;
+                const movementY = e.movementY || 0;
+                
+                yawObject.rotation.y -= movementX * 0.002;
+                pitchObject.rotation.x -= movementY * 0.002;
+                pitchObject.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchObject.rotation.x));
+            });
+
+            document.addEventListener('mousedown', (e) => {
+                if (!isPlaying || isMobile) {
+                    if (!isMobile && e.target.id === 'game-canvas' && document.getElementById('inventory-screen').classList.contains('hidden')) {
+                        document.body.requestPointerLock();
+                    }
+                    return;
+                }
+                if (e.button === 0) tryBreakBlock();
+                else if (e.button === 2) tryPlaceBlock();
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                if (isMobile) return;
+                isLocked = document.pointerLockElement === document.body;
+                isPlaying = isLocked;
+                if(isPlaying) {
+                    document.getElementById('main-menu').classList.add('hidden');
+                    document.getElementById('hud').classList.remove('hidden');
+                } else {
+                    if (document.getElementById('inventory-screen').classList.contains('hidden')) {
+                        document.getElementById('main-menu').classList.remove('hidden');
+                        document.getElementById('hud').classList.add('hidden');
+                    }
+                }
+            });
+            
+            if (isMobile) {
+                initMobileControls();
+            }
+        }
+        
+        function initMobileControls() {
+            // Touch Look Zone
+            const lookZone = document.getElementById('touch-look-zone');
+            lookZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(lookTouchId === null) {
+                        lookTouchId = e.changedTouches[i].identifier;
+                        prevTouchX = e.changedTouches[i].clientX;
+                        prevTouchY = e.changedTouches[i].clientY;
+                    }
+                }
+            }, {passive: false});
+
+            lookZone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!isPlaying) return;
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(e.changedTouches[i].identifier === lookTouchId) {
+                        const touch = e.changedTouches[i];
+                        yawObject.rotation.y -= (touch.clientX - prevTouchX) * 0.005;
+                        pitchObject.rotation.x -= (touch.clientY - prevTouchY) * 0.005;
+                        pitchObject.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchObject.rotation.x));
+                        prevTouchX = touch.clientX;
+                        prevTouchY = touch.clientY;
+                    }
+                }
+            }, {passive: false});
+
+            const resetLook = (e) => {
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(e.changedTouches[i].identifier === lookTouchId) lookTouchId = null;
+                }
+            };
+            lookZone.addEventListener('touchend', resetLook);
+            lookZone.addEventListener('touchcancel', resetLook);
+
+            // Joystick
+            const joyBase = document.getElementById('joystick-base');
+            const joyKnob = document.getElementById('joystick-knob');
+            let joyTouchId = null;
+
+            const updateJoystick = (touch) => {
+                const rect = joyBase.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                let dx = touch.clientX - centerX;
+                let dy = touch.clientY - centerY;
+                const maxRadius = rect.width / 2;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist > maxRadius) {
+                    dx = (dx / dist) * maxRadius;
+                    dy = (dy / dist) * maxRadius;
+                }
+                
+                joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                joystickData.x = dx / maxRadius;
+                joystickData.y = dy / maxRadius;
+            };
+
+            joyBase.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if (joyTouchId === null) {
+                        joyTouchId = e.changedTouches[i].identifier;
+                        updateJoystick(e.changedTouches[i]);
+                    }
+                }
+            }, {passive: false});
+
+            joyBase.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joyTouchId) updateJoystick(e.changedTouches[i]);
+                }
+            }, {passive: false});
+
+            const resetJoy = (e) => {
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joyTouchId) {
+                        joyTouchId = null;
+                        joyKnob.style.transform = `translate(-50%, -50%)`;
+                        joystickData.x = 0; joystickData.y = 0;
+                    }
+                }
+            };
+            joyBase.addEventListener('touchend', resetJoy);
+            joyBase.addEventListener('touchcancel', resetJoy);
+
+            // Action Buttons
+            const btnJump = document.getElementById('btn-jump');
+            btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); keys.space = true; }, {passive: false});
+            btnJump.addEventListener('touchend', (e) => { e.preventDefault(); keys.space = false; }, {passive: false});
+            
+            document.getElementById('btn-break').addEventListener('touchstart', (e) => { e.preventDefault(); tryBreakBlock(); }, {passive: false});
+            document.getElementById('btn-place').addEventListener('touchstart', (e) => { e.preventDefault(); tryPlaceBlock(); }, {passive: false});
+            document.getElementById('btn-inv-mobile').addEventListener('touchstart', (e) => { e.preventDefault(); toggleInventory(); }, {passive: false});
+        }
+
+        // AABB Collision check
+        function checkCollision(x, y, z) {
+            const minX = Math.floor(x - player.radius);
+            const maxX = Math.floor(x + player.radius);
+            const minY = Math.floor(y - player.height);
+            const maxY = Math.floor(y); // Head
+            const minZ = Math.floor(z - player.radius);
+            const maxZ = Math.floor(z + player.radius);
+
+            for(let bx = minX; bx <= maxX; bx++) {
+                for(let by = minY; by <= maxY; by++) {
+                    for(let bz = minZ; bz <= maxZ; bz++) {
+                        let bId = getBlock(bx, by, bz);
+                        // Wheat isn't solid
+                        if (bId !== BLOCKS.AIR && bId < BLOCKS.WHEAT_0) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        function updatePhysics(dt) {
+            if (!isPlaying) return;
+
+            // Input Velocity
+            let moveVel = new THREE.Vector3(0, 0, 0);
+            
+            let moveZ = (keys.w ? -1 : 0) + (keys.s ? 1 : 0) + joystickData.y;
+            let moveX = (keys.a ? -1 : 0) + (keys.d ? 1 : 0) + joystickData.x;
+            
+            moveZ = Math.max(-1, Math.min(1, moveZ));
+            moveX = Math.max(-1, Math.min(1, moveX));
+
+            moveVel.z = moveZ;
+            moveVel.x = moveX;
+            
+            if (moveVel.lengthSq() > 1) moveVel.normalize();
+            
+            moveVel.applyEuler(new THREE.Euler(0, yawObject.rotation.y, 0));
+            moveVel.multiplyScalar(player.speed * dt);
+
+            // Gravity
+            player.vy += gravity * dt;
+            
+            // Jump
+            if (keys.space && player.onGround) {
+                player.vy = player.jumpPower;
+                player.onGround = false;
+            }
+
+            // Move Y
+            player.y += player.vy * dt;
+            if (checkCollision(player.x, player.y, player.z)) {
+                if (player.vy < 0) { // Hit ground
+                    player.y = Math.ceil(player.y - player.height) + player.height;
+                    player.onGround = true;
+                } else { // Hit ceiling
+                    player.y = Math.floor(player.y) - 0.01;
+                }
+                player.vy = 0;
+            } else {
+                player.onGround = false;
+            }
+
+            // Move X
+            player.x += moveVel.x;
+            if (checkCollision(player.x, player.y, player.z)) {
+                player.x -= moveVel.x; // Revert
+            }
+
+            // Move Z
+            player.z += moveVel.z;
+            if (checkCollision(player.x, player.y, player.z)) {
+                player.z -= moveVel.z; // Revert
+            }
+
+            // Fall off world protection
+            if (player.y < -10) { player.y = 20; player.vy = 0; }
+            if (player.x < 0) player.x = 0;
+            if (player.x > WORLD_SIZE) player.x = WORLD_SIZE;
+            if (player.z < 0) player.z = 0;
+            if (player.z > WORLD_SIZE) player.z = WORLD_SIZE;
+
+            // Sync Camera
+            yawObject.position.set(player.x, player.y, player.z);
+        }
+
+        function updateFarming() {
+            const now = performance.now();
+            for (let [posKey, cropData] of crops.entries()) {
+                if (now - cropData.lastGrowTime > 5000) { // Grow every 5 seconds for demo speed
+                    if (cropData.stage < 2) {
+                        cropData.stage++;
+                        cropData.lastGrowTime = now;
+                        const [cx, cy, cz] = posKey.split(',').map(Number);
+                        
+                        // Update block ID
+                        let newBlockId = cropData.stage === 1 ? BLOCKS.WHEAT_1 : BLOCKS.WHEAT_2;
+                        CHUNK[getIndex(cx, cy, cz)] = newBlockId;
+                        updateMesh(cx, cy, cz);
+                    }
+                }
+            }
+        }
+
+        function renderHotbar() {
+            const container = document.getElementById('hotbar-container');
+            container.innerHTML = '';
+            for(let i=0; i<9; i++) {
+                const item = inventory[i];
+                const slot = document.createElement('div');
+                slot.className = `hotbar-slot ${i === activeSlot ? 'active' : ''}`;
+                
+                // Allow touch/click selection
+                slot.addEventListener('pointerdown', (e) => {
+                    e.stopPropagation();
+                    activeSlot = i;
+                    renderHotbar();
+                });
+                
+                if (item && item.id !== 0) {
+                    const icon = document.createElement('div');
+                    icon.className = `block-icon ${item.icon}`;
+                    slot.appendChild(icon);
+                    
+                    if(item.type !== 'tool') {
+                        const count = document.createElement('span');
+                        count.className = 'item-count';
+                        count.innerText = item.count;
+                        slot.appendChild(count);
+                    }
+                }
+                
+                // Number hint
+                const num = document.createElement('span');
+                num.className = 'absolute top-0 left-1 text-xs text-white/50 drop-shadow-md';
+                num.innerText = i + 1;
+                slot.appendChild(num);
+
+                container.appendChild(slot);
+            }
+            updateInventoryStats();
+        }
+
+        function toggleInventory() {
+            const invScreen = document.getElementById('inventory-screen');
+            if (invScreen.classList.contains('hidden')) {
+                if(!isMobile) document.exitPointerLock();
+                isPlaying = false;
+                invScreen.classList.remove('hidden');
+                document.getElementById('hud').classList.add('hidden');
+                updateInventoryStats();
+            } else {
+                invScreen.classList.add('hidden');
+                if (isMobile) {
+                    isPlaying = true;
+                    document.getElementById('hud').classList.remove('hidden');
+                } else {
+                    document.body.requestPointerLock();
+                }
+            }
+        }
+
+        function updateInventoryStats() {
+            const statsList = document.getElementById('inventory-stats');
+            statsList.innerHTML = '';
+            inventory.forEach(item => {
+                if(item && item.count > 0 && item.type !== 'tool') {
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center gap-2';
+                    li.innerHTML = `<div class="w-6 h-6 ${item.icon} border border-black inline-block"></div> ${item.count}`;
+                    statsList.appendChild(li);
+                }
+            });
+        }
+
+        // Crafting Logic
+        document.getElementById('btn-craft-planks').addEventListener('click', () => {
+            const woodItem = inventory.find(i => i.id === BLOCKS.WOOD);
+            const planksItem = inventory.find(i => i.id === BLOCKS.PLANKS);
+            
+            if (woodItem && woodItem.count > 0) {
+                woodItem.count--;
+                if (planksItem) {
+                    planksItem.count += 4;
+                }
+                renderHotbar();
+                updateInventoryStats();
+            }
+        });
+
+        // Main Menu Listeners
+        document.getElementById('btn-play').addEventListener('click', () => {
+            if (isMobile) {
+                isPlaying = true;
+                document.getElementById('main-menu').classList.add('hidden');
+                document.getElementById('hud').classList.remove('hidden');
+                document.getElementById('mobile-controls').style.display = 'block';
+                document.getElementById('touch-look-zone').style.display = 'block';
+                document.getElementById('btn-inv-mobile').style.display = 'flex';
+            } else {
+                document.body.requestPointerLock();
+            }
+        });
+        document.getElementById('btn-help').addEventListener('click', () => {
+            document.getElementById('help-panel').classList.toggle('hidden');
+        });
+        document.getElementById('btn-close-inv').addEventListener('click', toggleInventory);
+
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+
+            const time = performance.now();
+            const dt = (time - prevTime) / 1000;
+            prevTime = time;
+
+            if (isPlaying) {
+                updatePhysics(Math.min(dt, 0.1)); // Cap dt to prevent physics explosions on lag
+                updateFarming();
+
+                // Raycast update for UI targeting
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const intersects = raycaster.intersectObjects(Array.from(blockMeshes.values()), true);
+                const infoDiv = document.getElementById('target-info');
+                
+                if (intersects.length > 0) {
+                    let mesh = intersects[0].object;
+                    let targetData = mesh.userData.id !== undefined ? mesh.userData : (mesh.parent ? mesh.parent.userData : null);
+                    
+                    if(targetData) {
+                         let id = targetData.id;
+                         let name = Object.keys(BLOCKS).find(k => BLOCKS[k] === id) || "";
+                         infoDiv.innerText = name.replace('_', ' ');
+                    }
+                } else {
+                    infoDiv.innerText = '';
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Initialize Everything
+        initThreeJS();
+        generateWorld();
+        initControls();
+        renderHotbar();
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>
